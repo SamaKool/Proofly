@@ -1,245 +1,218 @@
 # Proofly
 
-**AI-assisted document verification and approval workflows**
+**Document verification and multi-stage approval workflows**
 
-Proofly is a full-stack platform for submitting documents, coordinating multi-stage reviews, and tracking verification progress. It combines a React web application, a Node.js REST API, MongoDB persistence, and a Python service for a retrieval-augmented policy assistant.
+Proofly is a full-stack document verification platform. Its React application supports applicant and verifier workflows, the Express API handles authentication and verification requests, and a Python/FastAPI service provides image verification capabilities. The repository also contains an experimental retrieval-augmented policy assistant.
 
-> **Project status:** This README describes the known project design. Confirm each feature, command, environment variable, and repository path against the implementation before presenting it as shipped functionality.
+> **Current state:** The frontend README describes the UI as in progress. Login and registration, applicant request pages, email-link handling, and verifier pages are present; the organization admin workflow builder, invitation flow, and final responsive design are planned. The policy assistant is an optional experiment and is not part of the first end-to-end verification flow.
 
-## Overview
+## What it includes
 
-Document reviews often involve several people, policy references, and approval steps. Proofly is designed to bring those activities into a single workflow:
+- **Verification requests and approvals:** Node.js and Express APIs for organizations, verifiers, verification requests, workflow templates, workflow steps, and workflow execution.
+- **Document handling:** Authenticated upload, listing, retrieval, and deletion routes. Files are currently written to the backend's local uploads/documents directory; accepted formats are PDF, JPEG, and PNG, with a 5 MB upload limit.
+- **Authentication:** JWT-based authentication and role checks. The backend uses cookies for authentication.
+- **Image verification service:** Python and FastAPI service with face verification and image quality routes.
+- **Experimental policy assistant:** RAG endpoint that retrieves local policy sample documents from Chroma and answers using Ollama. It returns source paths with the answer; the sample policy files are illustrative, not authoritative policy.
 
-- Submit and track document verification requests.
-- Move requests through configurable or defined approval stages. *(Confirm how stages are configured in this repository.)*
-- Authenticate users with JWT-based authentication.
-- Ask a RAG-based assistant questions about policy content. The assistant uses embeddings and vector retrieval to find relevant context before generating a response with an LLM.
-
-Proofly is an assistive workflow tool. AI-generated answers should be checked against the authoritative policy and should not be treated as a final verification decision unless the application explicitly implements that behavior.
-
-## Features
-
-The project context identifies these capabilities; verify their current implementation before claiming them as complete:
-
-- **Verification workflow:** document submission, review, and multi-stage approval.
-- **Progress visibility:** track a request as it moves through its workflow.
-- **REST API:** Express-based backend for application operations.
-- **JWT authentication:** authenticate requests using JSON Web Tokens.
-- **Policy assistant:** retrieve relevant policy material using embeddings and vector search, then provide context-aware LLM responses.
-- **Web interface:** React and Vite frontend for interacting with the platform.
-
-Items such as file storage, file type validation, role-based access control, notifications, audit logs, and specific reviewer assignment behavior are implementation-dependent and are intentionally not asserted here.
+The policy assistant has not been evaluated for retrieval quality or hallucination rate. Treat its answers as experimental and verify them against authoritative policy.
 
 ## Architecture
 
-The following is a logical view of the known components. Exact request routes, storage choices, and deployment topology depend on the repository configuration.
+    ┌─────────────────────┐      JSON / HTTP       ┌──────────────────────┐
+    │ React + Vite        │ ─────────────────────▶ │ Express REST API     │
+    │ Frontend            │                        │ JWT / MongoDB        │
+    └─────────────────────┘                        └──────────┬───────────┘
+                                                              │
+                              ┌───────────────────────────────┴──────────┐
+                              ▼                                          ▼
+                    ┌─────────────────────┐                  ┌─────────────────────┐
+                    │ MongoDB + Mongoose  │                  │ FastAPI ML service  │
+                    │ workflow and user   │                  │ image checks +      │
+                    │ records             │                  │ optional RAG        │
+                    └─────────────────────┘                  └─────────────────────┘
+                              │
+                              ▼
+                    Backend local disk:
+                    Backend/uploads/documents/
 
-    ┌─────────────────────────────┐
-    │ React + Vite web application│
-    └──────────────┬──────────────┘
-                   │ JSON REST requests
-                   ▼
-    ┌─────────────────────────────┐       ┌───────────────────┐
-    │ Node.js + Express API       │──────▶│ MongoDB + Mongoose│
-    │ JWT authentication          │       │ application data  │
-    └──────────────┬──────────────┘       └───────────────────┘
-                   │ assistant request
-                   ▼
-    ┌─────────────────────────────┐
-    │ Python + FastAPI AI service │
-    │ embeddings → vector retrieval
-    │ → LLM response              │
-    └─────────────────────────────┘
+For the policy assistant, the ML service loads policy text from ML-Service/RAG/sample_docs, splits it into chunks, embeds the chunks with sentence-transformers/all-MiniLM-L6-v2, and stores them in a local Chroma index. At query time it retrieves relevant chunks and uses the Ollama llama3.2:3b model to draft an answer.
 
-### Typical data flow
+## Technology
 
-1. A user interacts with the React application.
-2. The frontend sends requests to the Express REST API.
-3. The API authenticates requests with JWTs and handles application and workflow operations.
-4. Mongoose connects the API to MongoDB for the data represented in the application.
-5. For policy questions, the application sends a request to the FastAPI service. The AI service retrieves relevant policy context using embeddings and vector retrieval, then uses an LLM to formulate a response.
-
-The exact document upload path and the location of the original files are **not confirmed**. MongoDB may contain application records or file metadata, but do not infer that it stores the document files themselves. Document storage should be documented after confirming the implementation.
-
-## Technology stack
-
-| Area | Technology |
+| Area | Implementation |
 |---|---|
-| Frontend | React, Vite |
-| Backend API | Node.js, Express |
-| Database / object mapping | MongoDB, Mongoose |
-| Authentication | JWT |
-| AI service | Python, FastAPI |
-| Policy assistant | RAG, embeddings, vector retrieval, LLM |
+| Frontend | React 19, Vite 8, Axios, React Router |
+| Backend | Node.js, Express 5 |
+| Database | MongoDB with Mongoose |
+| Authentication | JSON Web Tokens, cookie parser, role middleware |
+| Document uploads | Multer, local disk storage |
+| ML service | Python, FastAPI, OpenCV, InsightFace, ONNX Runtime |
+| Policy assistant | LangChain, Chroma, Hugging Face sentence-transformers, Ollama |
 
-Specific library names, versions, vector database choice, and LLM provider are configuration-specific and should be added only after checking the repository.
+## Repository layout
 
-## Repository structure
-
-This is an **illustrative template**, not a verified directory listing. Adjust it to match the actual project.
-
-    proofly/
-    ├── frontend/             # React + Vite application
-    ├── backend/              # Node.js + Express REST API
-    ├── ai-service/           # Python + FastAPI RAG service
-    ├── docs/                 # Optional project and API documentation
-    ├── .gitignore
+    Proofly/
+    ├── Backend/
+    │   ├── src/
+    │   │   ├── controllers/
+    │   │   ├── middlewares/
+    │   │   ├── models/
+    │   │   ├── routes/
+    │   │   └── services/
+    │   ├── test/
+    │   ├── .env.example
+    │   ├── package.json
+    │   └── server.js
+    ├── Frontend/
+    │   ├── src/
+    │   ├── public/
+    │   └── package.json
+    ├── ML-Service/
+    │   ├── RAG/
+    │   │   ├── sample_docs/
+    │   │   ├── ingest.py
+    │   │   ├── qa_chain.py
+    │   │   └── router.py
+    │   ├── routers/
+    │   ├── services/
+    │   ├── tests/
+    │   ├── app.py
+    │   └── requirements.txt
+    ├── docs/
     └── README.md
 
-The repository may use different folder names or a monorepo layout. Replace these paths and the commands below with the actual package and service locations.
+## Run locally
 
-## Customize this README for the repository
+### Requirements
 
-Before publishing, compare this document with the code and update these items:
+- Node.js and npm
+- Python and pip
+- MongoDB
+- Ollama with the llama3.2:3b model, for the optional policy assistant
 
-1. Replace the illustrative folder names with the real directory tree.
-2. Copy the exact install and start scripts from the package manifests and Python service configuration. Confirm supported runtime versions and ports.
-3. Replace the example environment variable names with the variables the services actually read. Keep secret values out of the README.
-4. Add only verified API routes, authentication details, and documentation links.
-5. Confirm where original documents and derived policy data are stored, and describe the actual embedding model, vector retrieval implementation, and LLM provider only if configured.
-6. Mark features as implemented, in progress, or planned based on the current code. Remove any items that do not apply.
-7. Add the real contribution instructions and license, or leave those sections clearly marked until decided.
+### 1. Clone the repository
 
-## Getting started
+    git clone https://github.com/SamaKool/Proofly.git
+    cd Proofly
 
-### Prerequisites
+### 2. Configure and start the backend
 
-Install the runtimes and services required by the repository:
+    cd Backend
+    npm ci
+    copy .env.example .env
 
-- Node.js and npm (or the package manager specified by the frontend/backend manifests)
-- Python (use the version specified by the AI service, if present)
-- A MongoDB instance or connection string
-- Credentials/configuration for the chosen LLM and embedding services, if required by the AI implementation
+On macOS or Linux, use cp .env.example .env instead of the Windows copy command. Edit Backend/.env and set the secrets and service credentials for your environment. The checked-in example includes these variable names:
 
-### 1. Get the code
+| Variable | Purpose |
+|---|---|
+| PORT | Backend port; the example uses 3000 |
+| MONGO_URI | MongoDB connection string |
+| JWT_SECRET | Secret used for JWT signing |
+| FRONTEND_URL | Allowed frontend origin; the example uses http://localhost:5173 |
+| ML_SERVICE_URL | ML service address; the example uses http://localhost:8000 |
+| VERIFICATION_RESULT_DIGEST_KEY | Independent secret for verification result digests |
+| GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, GOOGLE_USER | Google OAuth and sender configuration used by email integrations |
 
-    git clone <YOUR_REPOSITORY_URL>
-    cd <YOUR_REPOSITORY_DIRECTORY>
+Start the API from Backend:
 
-Replace the placeholders with the repository URL and folder name. If the frontend, backend, or AI service is in a subdirectory, run each service's commands from that directory.
+    npm run dev
 
-### 2. Configure environment variables
+The API uses port 3000 in the example configuration. Its health check is GET http://localhost:3000/api/health.
 
-Create the environment files expected by the actual services. The names below are **suggested placeholders**, not confirmed variable names. Check the source code and existing example files, and never commit real secrets.
+### 3. Start the ML service
 
-**Backend .env (illustrative):**
+In a second terminal, from the repository root:
 
-    PORT=<BACKEND_PORT>
-    MONGODB_URI=<MONGODB_CONNECTION_STRING>
-    JWT_SECRET=<LONG_RANDOM_SECRET>
-    AI_SERVICE_URL=<FASTAPI_BASE_URL>
-
-**Frontend .env (illustrative):**
-
-    VITE_API_BASE_URL=<BACKEND_API_BASE_URL>
-
-Vite exposes variables prefixed with VITE_ to client-side code. Do not put database credentials, JWT signing secrets, or private provider keys in frontend variables.
-
-**AI service environment (illustrative):**
-
-    AI_SERVICE_PORT=<AI_SERVICE_PORT>
-    LLM_API_KEY=<PROVIDER_API_KEY>
-    EMBEDDING_MODEL=<EMBEDDING_MODEL_NAME>
-    LLM_MODEL=<LLM_MODEL_NAME>
-    VECTOR_STORE_PATH_OR_URL=<VECTOR_STORE_CONFIGURATION>
-
-The AI service may use different names or obtain model and vector store configuration another way. Include only the settings actually read by the service. Keep secrets in local environment configuration or an approved secret manager.
-
-### 3. Install dependencies
-
-Run commands in the corresponding service directories, adjusting paths and package managers to match the repository.
-
-**Frontend** (example for npm):
-
-    cd <FRONTEND_DIRECTORY>
-    npm install
-
-**Backend** (example for npm):
-
-    cd <BACKEND_DIRECTORY>
-    npm install
-
-**AI service** (example using a Python virtual environment):
-
-    cd <AI_SERVICE_DIRECTORY>
+    cd ML-Service
     python -m venv .venv
-
-Activate the environment, then install the dependencies listed by the project (for example, from requirements.txt if one exists):
-
     python -m pip install -r requirements.txt
+    uvicorn app:app --reload --port 8000
 
-If the repository uses Poetry, uv, conda, pnpm, yarn, or another tool, use its checked-in lockfile and documented workflow instead.
+Activate the virtual environment before installing or running the service. On Windows PowerShell, use .venv\Scripts\Activate.ps1; on macOS or Linux, use source .venv/bin/activate.
 
-### 4. Run the services
+The ML service serves its FastAPI documentation at http://localhost:8000/docs when running.
 
-Start each service in a separate terminal. The commands below are examples only; confirm the scripts, modules, ports, and working directories in the actual repository.
+### 4. Start the frontend
 
-**Backend API:**
+In a third terminal:
 
-    cd <BACKEND_DIRECTORY>
-    npm run <BACKEND_START_SCRIPT>
+    cd Frontend
+    npm ci
+    npm run dev
 
-**AI service:**
+Open http://localhost:5173. The current API client is configured to call http://localhost:3000/api; the frontend does not currently use a VITE_API_BASE_URL setting. The backend's FRONTEND_URL must allow the frontend origin.
 
-    cd <AI_SERVICE_DIRECTORY>
-    uvicorn <FASTAPI_MODULE>:<APP_OBJECT> --reload --host 127.0.0.1 --port <AI_SERVICE_PORT>
+### 5. Build the optional policy index
 
-For example, replace <FASTAPI_MODULE>:<APP_OBJECT> with the import path used by the project, such as main:app, only if that matches the code.
+The RAG sample documents and Chroma index are separate from the core verification journey. From the ML-Service directory, build the local index:
 
-**Frontend:**
+    python -m RAG.ingest
 
-    cd <FRONTEND_DIRECTORY>
-    npm run <FRONTEND_DEV_SCRIPT>
+Install and start Ollama, then make the configured model available:
 
-Set the frontend API base URL and backend AI-service URL to the addresses used in your local setup. Open the development URL printed by Vite. No default ports are assumed here because they are repository-specific.
+    ollama pull llama3.2:3b
 
-## API documentation
+The assistant endpoint is POST http://localhost:8000/rag/query with a JSON body such as:
 
-API routes and schemas have not been provided, so no endpoint list is included here. Add the actual API reference when available:
+    {"question":"What documents are accepted for PAN verification?"}
 
-- **Base URL:** <LOCAL_OR_DEPLOYED_API_BASE_URL>
-- **API reference or OpenAPI document:** <LINK_OR_PATH_TO_API_DOCUMENTATION>
-- **Authentication format:** <CONFIRM_HEADER_AND_TOKEN_FLOW>
+The response contains answer and sources fields. The generated ML-Service/RAG/chroma_store index is local and is not committed to the repository.
 
-Document each implemented route with its method, path, authentication requirements, request fields, response shape, and common errors. If the API publishes an OpenAPI specification, link to the actual specification or interactive docs URL.
+## API reference
 
-## Security and privacy
+The backend API base path is http://localhost:3000/api. Current route groups include:
 
-- Keep JWT signing secrets and provider API keys out of source control and client-side bundles.
-- Validate and authorize requests on the server; client-side checks alone do not protect API operations.
-- Apply least-privilege access to verification records and document contents.
-- Confirm how uploaded files are stored, accessed, validated, retained, and deleted before handling sensitive documents.
-- Use HTTPS and appropriately protected configuration outside local development.
-- Treat retrieved policy passages and LLM responses as untrusted content. Show users the source context where practical and require human review for consequential decisions.
-- Avoid sending sensitive document contents to external AI providers unless the data handling, consent, and provider configuration have been reviewed.
-- Configure CORS, request limits, logging, and error responses according to the deployment environment.
+- /auth
+- /email
+- /organizations
+- /verification-requests
+- /verifier
+- /workflows
+- /workflow-step
+- /workflow-engine
 
-These are security considerations for operating the project; they are not claims that each control is already implemented.
+The backend also provides GET /health. See the route implementations in [Backend/src/routes](https://github.com/SamaKool/Proofly/tree/main/Backend/src/routes) for the current methods, request fields, and access requirements. The ML service provides interactive FastAPI documentation at http://localhost:8000/docs while it is running.
+
+## Security and data notes
+
+- Do not commit populated .env files or reuse the example secret values.
+- Uploaded documents are stored on the backend's local filesystem under Backend/uploads/documents. Protect that directory and configure durable, access-controlled storage before deploying beyond local development.
+- Uploads are restricted by the current Multer configuration to PDF, JPEG, and PNG files up to 5 MB.
+- The API uses Helmet, rate limiting, CORS allowlisting, JWT authentication, and role middleware. Configure FRONTEND_URL and secrets for each environment.
+- Do not treat the sample policy documents or experimental RAG responses as legal or compliance guidance.
+- Review data retention and access controls before processing real identity documents.
+
+## Checks
+
+The repository defines these checks:
+
+**Backend** (from Backend):
+
+    npm test
+
+This runs the backend unit and integration test scripts.
+
+**Frontend** (from Frontend):
+
+    npm run lint
+    npm run build
+    node --test src/pages/dashboard/requestStatus.test.js
+
+**ML service** (from ML-Service):
+
+    pytest
+
+Run the commands from their stated directories and install the corresponding dependencies first.
 
 ## Roadmap
 
-Potential next steps, depending on the current implementation:
-
-- Document the actual workflow states, approval rules, and permissions.
-- Add clear source references to policy assistant responses.
-- Document and harden document storage and access controls.
-- Add operational observability and error handling across the API and AI service.
-- Publish verified API documentation and setup examples.
-- Add automated checks and deployment guidance once those workflows exist in the repository.
+The Frontend README identifies the organization admin workflow builder, invitation flow, and final responsive design as planned work. Other next steps include documenting the complete API contract, evaluating the policy assistant, and defining production document storage and retention.
 
 ## Contributing
 
-Contributions are welcome. Before opening a pull request:
-
-1. Check the existing issues and project conventions.
-2. Keep changes focused and document any new configuration.
-3. Include relevant validation steps and update this README when setup or behavior changes.
-
-Replace this section with your preferred contribution process, code of conduct, and issue/PR links.
+Please open an issue to discuss a larger change before submitting a pull request. Keep changes focused and include setup or validation notes when behavior changes.
 
 ## License
 
-**License: <CHOOSE_AND_CONFIRM_LICENSE>**
-
-Add the license that applies to this repository and include its license file before describing the project as open source. Do not assume a license.
+The repository currently has no top-level LICENSE file. Add a license file before redistributing the project or describing it as open source.
 
