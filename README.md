@@ -212,7 +212,3 @@ The Frontend README identifies the organization admin workflow builder, invitati
 
 Please open an issue to discuss a larger change before submitting a pull request. Keep changes focused and include setup or validation notes when behavior changes.
 
-## License
-
-The repository currently has no top-level LICENSE file. Add a license file before redistributing the project or describing it as open source.
-
