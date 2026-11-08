@@ -1,113 +1,245 @@
-# VerifyHub
+# Proofly
 
-VerifyHub is a full-stack identity-verification platform in active development. Its goal is to let an organization define a verification workflow once, reuse it for many applicants, and see each automated check and human decision in one traceable place.
+**AI-assisted document verification and approval workflows**
 
-> **Project status:** Phase 2 workflow reliability and the first complete Phase 3 PAN/Aadhaar verification pipeline are implemented in the current codebase. This is a portfolio/research project, not a certified KYC product or production identity service. Use synthetic identity data only.
+Proofly is a full-stack platform for submitting documents, coordinating multi-stage reviews, and tracking verification progress. It combines a React web application, a Node.js REST API, MongoDB persistence, and a Python service for a retrieval-augmented policy assistant.
 
-## Why I am building it
+> **Project status:** This README describes the known project design. Confirm each feature, command, environment variable, and repository path against the implementation before presenting it as shipped functionality.
 
-Organizations often coordinate identity checks through disconnected forms, email threads, tools, and manual handoffs. That makes the same process hard to reuse, hard to audit, and easy to apply inconsistently. VerifyHub explores a better boundary: the workflow engine decides **what happens next**, while separate verification services produce evidence and assigned people make review decisions. An applicant should see one clear journey instead of several unrelated checks.
+## Overview
 
-## Final vision
+Document reviews often involve several people, policy references, and approval steps. Proofly is designed to bring those activities into a single workflow:
 
-An organization administrator composes and publishes a reusable, versioned workflow through a no-code builder. They invite an applicant, who follows ordered email, identity-document, and selfie steps. OCR and face comparison provide evidence with documented confidence and limitations; an assigned verifier handles inconclusive cases. The applicant and organization see a consistent final result, and an audit trail explains how it was reached. Each request keeps the published workflow definition it started with, even after a newer version is created.
+- Submit and track document verification requests.
+- Move requests through configurable or defined approval stages. *(Confirm how stages are configured in this repository.)*
+- Authenticate users with JWT-based authentication.
+- Ask a RAG-based assistant questions about policy content. The assistant uses embeddings and vector retrieval to find relevant context before generating a response with an LLM.
 
-The first showcase will deliberately use **strictly sequential** email, Aadhaar/PAN document, and face-verification steps. Optional phone, police, medical, parallel branching, and advanced enterprise features belong to later work, not to claims about the current release.
+Proofly is an assistive workflow tool. AI-generated answers should be checked against the authoritative policy and should not be treated as a final verification decision unless the application explicitly implements that behavior.
 
-## What exists today
+## Features
 
-- Express API with registration, login/logout, cookie-based JWT authentication, organization membership checks, tenant-scoped authorization, and workflow/request/document routes.
-- A strict sequential workflow engine with centralized request/execution transitions, one execution per request/step, idempotent commands, bounded retries, cancellation, immutable published versions, archival, transactional review/advancement, and structured audit events.
-- A versioned document-and-face evidence pipeline with file-quality checks, OCR adapters, PAN/Aadhaar type and format validation, masked fields with confidence, face extraction/comparison, explainable three-way decisions, immutable results, and audited human override.
-- React/Vite applicant capture and verifier evidence views, including camera capture with file fallback, quality guidance, reason codes, confidence display, document preview, and reason-required final decisions.
-- FastAPI versioned image-quality and face-evidence endpoints. Selfie image quality is **not** liveness or anti-spoofing; low face similarity is routed to manual review.
-- Node, MongoDB integration/concurrency, Python, and frontend checks. Browser automation and production threshold calibration remain future work.
+The project context identifies these capabilities; verify their current implementation before claiming them as complete:
 
-See [the MVP scope](docs/PHASE_0_MVP.md), [the Phase 2 plan](docs/superpowers/plans/2026-09-17-phase-2-workflow-reliability.md), [the Phase 3 plan](docs/superpowers/plans/2026-09-23-phase-3-verification-pipeline.md), and [the pipeline model card](docs/verification/model-card.md). The original [architecture document](docs/architecture-design.docx) is a broad design reference; implemented scope and limitations take precedence.
+- **Verification workflow:** document submission, review, and multi-stage approval.
+- **Progress visibility:** track a request as it moves through its workflow.
+- **REST API:** Express-based backend for application operations.
+- **JWT authentication:** authenticate requests using JSON Web Tokens.
+- **Policy assistant:** retrieve relevant policy material using embeddings and vector search, then provide context-aware LLM responses.
+- **Web interface:** React and Vite frontend for interacting with the platform.
 
-## Repository layout
+Items such as file storage, file type validation, role-based access control, notifications, audit logs, and specific reviewer assignment behavior are implementation-dependent and are intentionally not asserted here.
 
-```text
-Backend/       Express API, MongoDB models, workflow services, OCR, tests
-Frontend/      React/Vite applicant and verifier UI
-ML-Service/    FastAPI face prototype and optional RAG policy assistant
-docs/          MVP scope, architecture reference, implementation plan
-```
+## Architecture
 
-The application code remains in its existing directories to avoid import-path churn during the workflow-reliability work.
+The following is a logical view of the known components. Exact request routes, storage choices, and deployment topology depend on the repository configuration.
 
-## Local development
+    ┌─────────────────────────────┐
+    │ React + Vite web application│
+    └──────────────┬──────────────┘
+                   │ JSON REST requests
+                   ▼
+    ┌─────────────────────────────┐       ┌───────────────────┐
+    │ Node.js + Express API       │──────▶│ MongoDB + Mongoose│
+    │ JWT authentication          │       │ application data  │
+    └──────────────┬──────────────┘       └───────────────────┘
+                   │ assistant request
+                   ▼
+    ┌─────────────────────────────┐
+    │ Python + FastAPI AI service │
+    │ embeddings → vector retrieval
+    │ → LLM response              │
+    └─────────────────────────────┘
+
+### Typical data flow
+
+1. A user interacts with the React application.
+2. The frontend sends requests to the Express REST API.
+3. The API authenticates requests with JWTs and handles application and workflow operations.
+4. Mongoose connects the API to MongoDB for the data represented in the application.
+5. For policy questions, the application sends a request to the FastAPI service. The AI service retrieves relevant policy context using embeddings and vector retrieval, then uses an LLM to formulate a response.
+
+The exact document upload path and the location of the original files are **not confirmed**. MongoDB may contain application records or file metadata, but do not infer that it stores the document files themselves. Document storage should be documented after confirming the implementation.
+
+## Technology stack
+
+| Area | Technology |
+|---|---|
+| Frontend | React, Vite |
+| Backend API | Node.js, Express |
+| Database / object mapping | MongoDB, Mongoose |
+| Authentication | JWT |
+| AI service | Python, FastAPI |
+| Policy assistant | RAG, embeddings, vector retrieval, LLM |
+
+Specific library names, versions, vector database choice, and LLM provider are configuration-specific and should be added only after checking the repository.
+
+## Repository structure
+
+This is an **illustrative template**, not a verified directory listing. Adjust it to match the actual project.
+
+    proofly/
+    ├── frontend/             # React + Vite application
+    ├── backend/              # Node.js + Express REST API
+    ├── ai-service/           # Python + FastAPI RAG service
+    ├── docs/                 # Optional project and API documentation
+    ├── .gitignore
+    └── README.md
+
+The repository may use different folder names or a monorepo layout. Replace these paths and the commands below with the actual package and service locations.
+
+## Customize this README for the repository
+
+Before publishing, compare this document with the code and update these items:
+
+1. Replace the illustrative folder names with the real directory tree.
+2. Copy the exact install and start scripts from the package manifests and Python service configuration. Confirm supported runtime versions and ports.
+3. Replace the example environment variable names with the variables the services actually read. Keep secret values out of the README.
+4. Add only verified API routes, authentication details, and documentation links.
+5. Confirm where original documents and derived policy data are stored, and describe the actual embedding model, vector retrieval implementation, and LLM provider only if configured.
+6. Mark features as implemented, in progress, or planned based on the current code. Remove any items that do not apply.
+7. Add the real contribution instructions and license, or leave those sections clearly marked until decided.
+
+## Getting started
 
 ### Prerequisites
 
-- Node.js 22 and npm.
-- MongoDB for the API. The workflow migration and future transactional coordinator require a **replica set**; the backend integration tests create a temporary one automatically.
-- Google OAuth mail credentials for the current email sender. The backend checks for these variables at startup, and email delivery requires valid values.
-- Python and the ML-service dependencies only if you want to run face verification or the optional RAG extension. Model downloads and platform-specific native packages may be required.
+Install the runtimes and services required by the repository:
 
-### API
+- Node.js and npm (or the package manager specified by the frontend/backend manifests)
+- Python (use the version specified by the AI service, if present)
+- A MongoDB instance or connection string
+- Credentials/configuration for the chosen LLM and embedding services, if required by the AI implementation
 
-```bash
-cd Backend
-npm ci
-cp .env.example .env
-# Set your own values in .env
-mkdir -p uploads/documents
-node server.js
-```
+### 1. Get the code
 
-The API listens on `http://localhost:3000` by default; `GET /api/health` is the basic health check. Do not commit `.env`, uploaded identity files, or real applicant data.
+    git clone <YOUR_REPOSITORY_URL>
+    cd <YOUR_REPOSITORY_DIRECTORY>
 
-The example environment file documents the required settings. `MONGO_URI`, `JWT_SECRET`, `VERIFICATION_RESULT_DIGEST_KEY`, and the Google mail variables need local values; the example is not a usable credential set. Use an independent high-entropy digest key because it protects equality digests for masked identity fields. The current frontend API URL is hardcoded to `http://localhost:3000/api`.
+Replace the placeholders with the repository URL and folder name. If the frontend, backend, or AI service is in a subdirectory, run each service's commands from that directory.
 
-### Frontend
+### 2. Configure environment variables
 
-```bash
-cd Frontend
-npm ci
-npm run dev
-```
+Create the environment files expected by the actual services. The names below are **suggested placeholders**, not confirmed variable names. Check the source code and existing example files, and never commit real secrets.
 
-Vite serves the UI on `http://localhost:5173` by default. Camera capture requires browser permission and a secure context (localhost qualifies in modern browsers); a file-input fallback is available.
+**Backend .env (illustrative):**
 
-### ML service
+    PORT=<BACKEND_PORT>
+    MONGODB_URI=<MONGODB_CONNECTION_STRING>
+    JWT_SECRET=<LONG_RANDOM_SECRET>
+    AI_SERVICE_URL=<FASTAPI_BASE_URL>
 
-```bash
-cd ML-Service
-python -m venv .venv
-# Activate the virtual environment for your shell
-python -m pip install -r requirements.txt
-uvicorn app:app --reload --port 8000
-```
+**Frontend .env (illustrative):**
 
-The backend uses `ML_SERVICE_URL` (default `http://localhost:8000`). Face models may download on first run and InsightFace/ONNX support is platform-sensitive. Scores use engineering defaults and are not production-calibrated; review the [model card](docs/verification/model-card.md). The optional RAG extension has separate index and Ollama setup in [its notes](ML-Service/RAG/README.md).
+    VITE_API_BASE_URL=<BACKEND_API_BASE_URL>
 
-## Checks
+Vite exposes variables prefixed with VITE_ to client-side code. Do not put database credentials, JWT signing secrets, or private provider keys in frontend variables.
 
-```bash
-cd Backend
-npm test
-```
+**AI service environment (illustrative):**
 
-```bash
-cd Frontend
-npm run lint
-npm run build
-node --test src/pages/dashboard/requestStatus.test.js
-```
+    AI_SERVICE_PORT=<AI_SERVICE_PORT>
+    LLM_API_KEY=<PROVIDER_API_KEY>
+    EMBEDDING_MODEL=<EMBEDDING_MODEL_NAME>
+    LLM_MODEL=<LLM_MODEL_NAME>
+    VECTOR_STORE_PATH_OR_URL=<VECTOR_STORE_CONFIGURATION>
 
-Backend integration tests use `mongodb-memory-server`, so their first run may download a MongoDB binary. The frontend has a small status-unit test but no browser-level end-to-end suite yet.
+The AI service may use different names or obtain model and vector store configuration another way. Include only the settings actually read by the service. Keep secrets in local environment configuration or an approved secret manager.
 
-```bash
-cd ML-Service
-python -m pytest -q
-python -m calibration.evaluate_thresholds calibration/fixtures.example.json
-```
+### 3. Install dependencies
 
-The calibration fixture is synthetic and only demonstrates the report format. It is not an accuracy claim.
+Run commands in the corresponding service directories, adjusting paths and package managers to match the repository.
 
-## Workflow data safety
+**Frontend** (example for npm):
 
-From `Backend/`, `npm run migrate:workflow` runs a **read-only preflight** by default. The `--apply` and `--install-indexes` modes require `--backup-confirmed`. On a real database, stop workflow writes, take and verify a backup, resolve every reported violation, and run the verification stage before installing indexes. The tooling has only been exercised against temporary test databases; it has not been run on project user data.
+    cd <FRONTEND_DIRECTORY>
+    npm install
 
+**Backend** (example for npm):
+
+    cd <BACKEND_DIRECTORY>
+    npm install
+
+**AI service** (example using a Python virtual environment):
+
+    cd <AI_SERVICE_DIRECTORY>
+    python -m venv .venv
+
+Activate the environment, then install the dependencies listed by the project (for example, from requirements.txt if one exists):
+
+    python -m pip install -r requirements.txt
+
+If the repository uses Poetry, uv, conda, pnpm, yarn, or another tool, use its checked-in lockfile and documented workflow instead.
+
+### 4. Run the services
+
+Start each service in a separate terminal. The commands below are examples only; confirm the scripts, modules, ports, and working directories in the actual repository.
+
+**Backend API:**
+
+    cd <BACKEND_DIRECTORY>
+    npm run <BACKEND_START_SCRIPT>
+
+**AI service:**
+
+    cd <AI_SERVICE_DIRECTORY>
+    uvicorn <FASTAPI_MODULE>:<APP_OBJECT> --reload --host 127.0.0.1 --port <AI_SERVICE_PORT>
+
+For example, replace <FASTAPI_MODULE>:<APP_OBJECT> with the import path used by the project, such as main:app, only if that matches the code.
+
+**Frontend:**
+
+    cd <FRONTEND_DIRECTORY>
+    npm run <FRONTEND_DEV_SCRIPT>
+
+Set the frontend API base URL and backend AI-service URL to the addresses used in your local setup. Open the development URL printed by Vite. No default ports are assumed here because they are repository-specific.
+
+## API documentation
+
+API routes and schemas have not been provided, so no endpoint list is included here. Add the actual API reference when available:
+
+- **Base URL:** <LOCAL_OR_DEPLOYED_API_BASE_URL>
+- **API reference or OpenAPI document:** <LINK_OR_PATH_TO_API_DOCUMENTATION>
+- **Authentication format:** <CONFIRM_HEADER_AND_TOKEN_FLOW>
+
+Document each implemented route with its method, path, authentication requirements, request fields, response shape, and common errors. If the API publishes an OpenAPI specification, link to the actual specification or interactive docs URL.
+
+## Security and privacy
+
+- Keep JWT signing secrets and provider API keys out of source control and client-side bundles.
+- Validate and authorize requests on the server; client-side checks alone do not protect API operations.
+- Apply least-privilege access to verification records and document contents.
+- Confirm how uploaded files are stored, accessed, validated, retained, and deleted before handling sensitive documents.
+- Use HTTPS and appropriately protected configuration outside local development.
+- Treat retrieved policy passages and LLM responses as untrusted content. Show users the source context where practical and require human review for consequential decisions.
+- Avoid sending sensitive document contents to external AI providers unless the data handling, consent, and provider configuration have been reviewed.
+- Configure CORS, request limits, logging, and error responses according to the deployment environment.
+
+These are security considerations for operating the project; they are not claims that each control is already implemented.
+
+## Roadmap
+
+Potential next steps, depending on the current implementation:
+
+- Document the actual workflow states, approval rules, and permissions.
+- Add clear source references to policy assistant responses.
+- Document and harden document storage and access controls.
+- Add operational observability and error handling across the API and AI service.
+- Publish verified API documentation and setup examples.
+- Add automated checks and deployment guidance once those workflows exist in the repository.
+
+## Contributing
+
+Contributions are welcome. Before opening a pull request:
+
+1. Check the existing issues and project conventions.
+2. Keep changes focused and document any new configuration.
+3. Include relevant validation steps and update this README when setup or behavior changes.
+
+Replace this section with your preferred contribution process, code of conduct, and issue/PR links.
+
+## License
+
+**License: <CHOOSE_AND_CONFIRM_LICENSE>**
+
+Add the license that applies to this repository and include its license file before describing the project as open source. Do not assume a license.
 
